@@ -41,6 +41,16 @@
     grid-template-rows:1fr 92px;
     height:100vh;
   }
+  #menu-toggle{
+    display:none;
+    position:fixed;top:10px;left:10px;z-index:70;
+    width:38px;height:38px;border-radius:50%;border:none;
+    background:var(--bg-elev);color:var(--text);font-size:18px;cursor:pointer;
+  }
+  #sidebar-backdrop{
+    display:none;
+    position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:55;
+  }
   /* SIDEBAR */
   #sidebar{
     grid-row:1;
@@ -229,10 +239,55 @@
   #player-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;}
   #player-right #volume{width:90px;}
   .toggle-btn.active{color:var(--accent) !important;}
+
+  /* ============ MÓVIL / PANTALLAS ESTRECHAS ============ */
+  @media (max-width: 860px){
+    body{overflow-x:hidden;overflow-y:auto;}
+    #app{
+      display:block;
+      height:auto;
+      min-height:100vh;
+      padding-bottom:150px; /* deja hueco para la barra del reproductor, que queda fija abajo */
+    }
+    #menu-toggle{display:flex;align-items:center;justify-content:center;}
+    #sidebar-backdrop.show{display:block;}
+    #sidebar{
+      position:fixed;top:0;left:0;bottom:0;z-index:60;
+      width:min(240px, 78vw);
+      transform:translateX(-100%);
+      transition:transform .2s ease-out;
+      box-shadow:2px 0 16px rgba(0,0,0,0.5);
+    }
+    #sidebar.open{transform:translateX(0);}
+    #main{
+      grid-row:auto;grid-column:auto;
+      width:100%;
+      padding:64px 16px 24px;
+    }
+    #player-bar{
+      grid-row:auto;grid-column:auto;
+      position:fixed;left:0;right:0;bottom:0;z-index:40;
+      display:flex;flex-direction:column;gap:8px;
+      padding:10px 12px 14px;
+    }
+    #now-playing{width:100%;}
+    #now-playing-info{flex:1;}
+    #player-center{width:100%;order:2;}
+    #seek-row{max-width:none;}
+    #player-right{order:3;width:100%;justify-content:flex-start;}
+    #player-right #volume{flex:1;max-width:160px;}
+    .track-row{grid-template-columns:40px 1fr auto auto;gap:8px;padding:8px 4px;}
+    .track-row [data-action="addpl"]{display:none;} /* menos botones por fila para dejar sitio al título */
+    #search-bar{max-width:none;}
+    .settings-box{max-width:none;}
+  }
 </style>
 </head>
 <body>
 <div id="app">
+
+  <button id="menu-toggle" aria-label="Abrir menú">☰</button>
+  <div id="sidebar-backdrop"></div>
 
   <div id="sidebar">
     <div id="logo"><span class="dot"></span>MiTube Música</div>
@@ -769,6 +824,7 @@ function renderSidebarPlaylists(){
       setActiveNav(null);
       renderSidebarPlaylists();
       renderView();
+      closeSidebar();
     };
   });
   el.querySelectorAll('.del').forEach(btn=>{
@@ -959,8 +1015,23 @@ document.querySelectorAll('.nav-item').forEach(item=>{
     setActiveNav(currentView);
     renderSidebarPlaylists();
     renderView();
+    closeSidebar();
   };
 });
+
+/* ============ MENÚ MÓVIL (sidebar deslizable) ============ */
+function openSidebar(){
+  document.getElementById('sidebar').classList.add('open');
+  document.getElementById('sidebar-backdrop').classList.add('show');
+  document.getElementById('menu-toggle').style.visibility = 'hidden';
+}
+function closeSidebar(){
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('sidebar-backdrop').classList.remove('show');
+  document.getElementById('menu-toggle').style.visibility = '';
+}
+document.getElementById('menu-toggle').onclick = openSidebar;
+document.getElementById('sidebar-backdrop').onclick = closeSidebar;
 document.getElementById('new-playlist-btn').onclick = ()=>{
   const name = prompt('Nombre de la nueva playlist:');
   if(name) createPlaylist(name);
