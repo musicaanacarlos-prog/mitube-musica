@@ -455,13 +455,38 @@ function onYouTubeIframeAPIReady(){
 }
 function onYtStateChange(e){
   if(e.data === YT.PlayerState.ENDED){ handleTrackEnded(); }
-  if(e.data === YT.PlayerState.PLAYING){ isPlaying = true; updatePlayPauseIcon(); }
-  if(e.data === YT.PlayerState.PAUSED){ isPlaying = false; updatePlayPauseIcon(); }
+  if(e.data === YT.PlayerState.PLAYING){ isPlaying = true; updatePlayPauseIcon(); setMediaSessionPlaybackState('playing'); }
+  if(e.data === YT.PlayerState.PAUSED){ isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); }
 }
 
 localAudio.addEventListener('ended', handleTrackEnded);
-localAudio.addEventListener('play', ()=>{ isPlaying = true; updatePlayPauseIcon(); });
-localAudio.addEventListener('pause', ()=>{ isPlaying = false; updatePlayPauseIcon(); });
+localAudio.addEventListener('play', ()=>{ isPlaying = true; updatePlayPauseIcon(); setMediaSessionPlaybackState('playing'); });
+localAudio.addEventListener('pause', ()=>{ isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); });
+
+/* ============ MEDIA SESSION (controles en pantalla de bloqueo / notificaciones) ============ */
+/* Esto es lo que le dice al sistema operativo qué mostrar (título, ⏮ ⏯ ⏭) y qué
+   hacer al pulsar esos botones con la pantalla apagada o bloqueada. */
+function updateMediaSessionMetadata(track){
+  if(!('mediaSession' in navigator) || !track) return;
+  navigator.mediaSession.metadata = new MediaMetadata({
+    title: track.title || 'Canción',
+    artist: track.subtitle || 'MiTube Música',
+    album: 'MiTube Música',
+    artwork: [
+      { src: './icon-192.png', sizes: '192x192', type: 'image/png' },
+      { src: './icon-512.png', sizes: '512x512', type: 'image/png' }
+    ]
+  });
+}
+function setMediaSessionPlaybackState(state){
+  if('mediaSession' in navigator) navigator.mediaSession.playbackState = state;
+}
+if('mediaSession' in navigator){
+  navigator.mediaSession.setActionHandler('play', ()=>{ if(currentTrack && !isPlaying) togglePlayPause(); });
+  navigator.mediaSession.setActionHandler('pause', ()=>{ if(currentTrack && isPlaying) togglePlayPause(); });
+  navigator.mediaSession.setActionHandler('previoustrack', ()=> prevTrack());
+  navigator.mediaSession.setActionHandler('nexttrack', ()=> nextTrack());
+}
 
 /* ============ PLAYBACK CONTROL ============ */
 function trackKey(t){ return t.kind + ':' + t.id; }
@@ -499,6 +524,8 @@ function loadTrack(track){
   document.getElementById('np-sub').textContent = track.subtitle || '';
   isPlaying = true;
   updatePlayPauseIcon();
+  updateMediaSessionMetadata(track);
+  setMediaSessionPlaybackState('playing');
 }
 
 function togglePlayPause(){
@@ -587,6 +614,9 @@ setInterval(()=>{
   document.getElementById('time-cur').textContent = fmtTime(cur);
   document.getElementById('time-dur').textContent = fmtTime(dur);
   if(!seekDragging && dur>0){ seekEl.value = (cur/dur)*100; }
+  if('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && dur>0 && isFinite(dur)){
+    try{ navigator.mediaSession.setPositionState({ duration: dur, position: Math.min(cur,dur), playbackRate: 1 }); }catch(e){}
+  }
 }, 500);
 
 /* ============ SEARCH (YouTube Data API v3) ============ */
