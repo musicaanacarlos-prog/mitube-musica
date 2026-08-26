@@ -301,13 +301,40 @@ function saveAll(){
   LS.set('mm_driveFolderId', driveFolderId);
 }
 
-/* ============ GOOGLE DRIVE STATE (in-memory only, not persisted) ============ */
+/* ============ GOOGLE DRIVE STATE ============ */
+/* The access token is cached in localStorage ONLY until its own expiry (~1h),
+   so reopening the app within that hour doesn't ask you to reconnect again.
+   Once it expires it's useless anyway, so this is not a "stay logged in forever" cache. */
 let driveAccessToken = null;
 let driveTokenClient = null;
 let driveConnected = false;
 let driveUserEmail = '';
 let driveLibrary = []; // [{kind:'drive', id, title, subtitle}]
 let driveSearchQuery = '';
+
+function saveDriveSession(token, expiresInSeconds, email){
+  const expiresAt = Date.now() + (expiresInSeconds*1000);
+  LS.set('mm_drive_token', token);
+  LS.set('mm_drive_token_expiry', expiresAt);
+  LS.set('mm_drive_email', email||'');
+}
+function clearDriveSession(){
+  localStorage.removeItem('mm_drive_token');
+  localStorage.removeItem('mm_drive_token_expiry');
+  localStorage.removeItem('mm_drive_email');
+}
+function restoreDriveSession(){
+  const token = LS.get('mm_drive_token', null);
+  const expiry = LS.get('mm_drive_token_expiry', 0);
+  if(token && expiry && Date.now() < expiry){
+    driveAccessToken = token;
+    driveConnected = true;
+    driveUserEmail = LS.get('mm_drive_email', '');
+    return true;
+  }
+  clearDriveSession();
+  return false;
+}
 
 function ensureTokenClient(){
   if(!window.google || !google.accounts || !google.accounts.oauth2) return null;
@@ -321,6 +348,7 @@ function ensureTokenClient(){
         driveAccessToken = resp.access_token;
         driveConnected = true;
         await fetchDriveUserEmail();
+        saveDriveSession(resp.access_token, resp.expires_in || 3600, driveUserEmail);
         await loadDriveLibrary();
         renderView();
       }
@@ -340,6 +368,7 @@ function disconnectDrive(){
   driveUserEmail = '';
   driveLibrary = [];
   driveSearchQuery = '';
+  clearDriveSession();
   renderView();
 }
 async function fetchDriveUserEmail(){
@@ -893,6 +922,9 @@ document.getElementById('new-playlist-btn').onclick = ()=>{
 };
 
 /* ============ INIT ============ */
+if(restoreDriveSession()){
+  loadDriveLibrary().then(renderView);
+}
 renderSidebarPlaylists();
 renderView();
 </script>
