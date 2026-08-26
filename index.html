@@ -142,6 +142,12 @@
   }
   .drive-status .dot-ok{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0;}
   .drive-status .dot-off{width:8px;height:8px;border-radius:50%;background:var(--text-sec);display:inline-block;flex-shrink:0;}
+  #drive-search-bar{max-width:420px;margin-bottom:16px;}
+  #drive-search-input{
+    width:100%;padding:10px 16px;border-radius:22px;border:none;
+    background:var(--bg-hi);color:var(--text);font-size:14px;outline:none;
+  }
+  #drive-search-input:focus{background:var(--bg-hi2);}
   .settings-box{max-width:480px;}
   .settings-box label{font-size:13px;color:var(--text-sec);display:block;margin-bottom:6px;}
   .settings-box input[type=text]{
@@ -301,6 +307,7 @@ let driveTokenClient = null;
 let driveConnected = false;
 let driveUserEmail = '';
 let driveLibrary = []; // [{kind:'drive', id, title, subtitle}]
+let driveSearchQuery = '';
 
 function ensureTokenClient(){
   if(!window.google || !google.accounts || !google.accounts.oauth2) return null;
@@ -332,6 +339,7 @@ function disconnectDrive(){
   driveConnected = false;
   driveUserEmail = '';
   driveLibrary = [];
+  driveSearchQuery = '';
   renderView();
 }
 async function fetchDriveUserEmail(){
@@ -756,22 +764,40 @@ function renderLibraryView(){
   }
   area.innerHTML = `
     <div class="drive-status"><span class="dot-ok"></span>Conectado${driveUserEmail ? ' como '+escapeHtml(driveUserEmail) : ''}</div>
-    <div style="display:flex;gap:10px;margin-bottom:20px;">
+    <div style="display:flex;gap:10px;margin-bottom:16px;">
       <button class="ghost-btn" id="refresh-drive-btn">Actualizar lista</button>
       <button class="ghost-btn" id="disconnect-drive-btn">Desconectar</button>
+    </div>
+    <div id="drive-search-bar">
+      <input id="drive-search-input" type="text" placeholder="Buscar en tu música de Drive...">
     </div>
     <div id="drive-list"></div>
   `;
   document.getElementById('refresh-drive-btn').onclick = async ()=>{ await loadDriveLibrary(); renderLibraryView(); };
   document.getElementById('disconnect-drive-btn').onclick = disconnectDrive;
 
+  const searchInput = document.getElementById('drive-search-input');
+  searchInput.value = driveSearchQuery;
+  searchInput.oninput = (e)=>{ driveSearchQuery = e.target.value; renderDriveList(); };
+
+  renderDriveList();
+}
+
+function renderDriveList(){
   const listEl = document.getElementById('drive-list');
+  if(!listEl) return;
   if(driveLibrary.length===0){
     listEl.innerHTML = `<div class="empty-state">No se encontraron audios en esa carpeta de Drive. Sube archivos de audio a esa carpeta y pulsa "Actualizar lista".</div>`;
     return;
   }
-  listEl.innerHTML = `<div class="track-list">${driveLibrary.map((t,i)=>trackRowHtml(t,i,driveLibrary)).join('')}</div>`;
-  wireTrackRows(listEl, driveLibrary);
+  const q = driveSearchQuery.trim().toLowerCase();
+  const filtered = q ? driveLibrary.filter(t=>t.title.toLowerCase().includes(q)) : driveLibrary;
+  if(filtered.length===0){
+    listEl.innerHTML = `<div class="empty-state">Ninguna canción coincide con "${escapeHtml(driveSearchQuery)}".</div>`;
+    return;
+  }
+  listEl.innerHTML = `<div class="track-list">${filtered.map((t,i)=>trackRowHtml(t,i,filtered)).join('')}</div>`;
+  wireTrackRows(listEl, filtered);
 }
 
 function renderFavoritesView(){
