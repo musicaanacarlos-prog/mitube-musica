@@ -2,8 +2,18 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>MiTube Música (Drive)</title>
+
+<!-- PWA: instalable como app en el móvil/escritorio -->
+<link rel="manifest" href="./manifest.json">
+<meta name="theme-color" content="#0e0e0e">
+<link rel="icon" href="./icon-192.png">
+<link rel="apple-touch-icon" href="./icon-192.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="MiTube Música">
 <style>
   :root{
     --bg:#0e0e0e;
@@ -932,6 +942,15 @@ if(restoreDriveSession()){
 }
 renderSidebarPlaylists();
 renderView();
+
+/* ============ PWA: registro del service worker ============ */
+/* Permite instalar la app (icono propio, sin barra del navegador) y que abra
+   sin tener que escribir la URL cada vez. */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  });
+}
 </script>
 </body>
 </html>
