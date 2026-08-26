@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiTube Música (Drive)</title>
+<style>
+  :root{
+    --bg:#0e0e0e;
+    --bg-elev:#181818;
+    --bg-hi:#282828;
+    --bg-hi2:#333333;
+    --text:#ffffff;
+    --text-sec:#b3b3b3;
+    --accent:#1db954;
+    --accent-hi:#1ed760;
+    --border:#2a2a2a;
+    --danger:#e74c3c;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    overflow:hidden;
+  }
+  #app{
+    display:grid;
+    grid-template-columns:240px 1fr;
+    grid-template-rows:1fr 92px;
+    height:100vh;
+  }
+  /* SIDEBAR */
+  #sidebar{
+    grid-row:1;
+    grid-column:1;
+    background:#000;
+    padding:16px 10px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+  }
+  #logo{
+    font-size:19px;
+    font-weight:800;
+    padding:6px 10px 0;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  #logo .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);display:inline-block;}
+  .nav-group{display:flex;flex-direction:column;gap:2px;}
+  .nav-item{
+    display:flex;align-items:center;gap:12px;
+    padding:9px 12px;border-radius:6px;cursor:pointer;
+    color:var(--text-sec);font-size:14px;font-weight:600;
+    user-select:none;
+  }
+  .nav-item:hover{color:var(--text);background:var(--bg-hi);}
+  .nav-item.active{color:var(--text);background:var(--bg-hi);}
+  .nav-item .ic{width:18px;text-align:center;}
+  #playlists-header{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:0 12px;color:var(--text-sec);font-size:12px;font-weight:700;
+    text-transform:uppercase;letter-spacing:.05em;
+  }
+  #new-playlist-btn{
+    background:none;border:none;color:var(--text-sec);cursor:pointer;font-size:18px;
+    line-height:1;padding:2px 6px;border-radius:4px;
+  }
+  #new-playlist-btn:hover{color:var(--text);background:var(--bg-hi);}
+  #playlist-list{display:flex;flex-direction:column;gap:1px;overflow-y:auto;}
+  .playlist-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:7px 12px;border-radius:6px;cursor:pointer;
+    color:var(--text-sec);font-size:13.5px;
+  }
+  .playlist-row:hover{color:var(--text);background:var(--bg-hi);}
+  .playlist-row.active{color:var(--text);background:var(--bg-hi);}
+  .playlist-row .del{opacity:0;background:none;border:none;color:var(--text-sec);cursor:pointer;font-size:13px;}
+  .playlist-row:hover .del{opacity:1;}
+  .playlist-row .del:hover{color:var(--danger);}
+
+  /* MAIN */
+  #main{
+    grid-row:1;grid-column:2;
+    overflow-y:auto;
+    padding:24px 32px 40px;
+    background:linear-gradient(#1c1c1c, var(--bg) 300px);
+  }
+  h1.view-title{font-size:26px;margin:0 0 4px;}
+  p.view-sub{color:var(--text-sec);margin:0 0 20px;font-size:14px;}
+  #search-bar{
+    display:flex;gap:10px;margin-bottom:22px;max-width:520px;
+  }
+  #search-input{
+    flex:1;padding:11px 16px;border-radius:22px;border:none;
+    background:var(--bg-hi);color:var(--text);font-size:14px;outline:none;
+  }
+  #search-input:focus{background:var(--bg-hi2);}
+  button.primary-btn{
+    background:var(--accent);color:#000;border:none;font-weight:700;
+    padding:11px 22px;border-radius:22px;cursor:pointer;font-size:14px;
+    white-space:nowrap;
+  }
+  button.primary-btn:hover{background:var(--accent-hi);}
+  button.ghost-btn{
+    background:transparent;color:var(--text);border:1px solid var(--text-sec);
+    padding:9px 18px;border-radius:22px;cursor:pointer;font-size:13.5px;font-weight:600;
+  }
+  button.ghost-btn:hover{border-color:var(--text);}
+  .track-list{display:flex;flex-direction:column;gap:2px;}
+  .track-row{
+    display:grid;grid-template-columns:44px 1fr auto auto auto;
+    align-items:center;gap:14px;padding:8px 10px;border-radius:6px;
+    cursor:default;
+  }
+  .track-row:hover{background:var(--bg-elev);}
+  .track-thumb{
+    width:44px;height:44px;border-radius:4px;object-fit:cover;background:var(--bg-hi);
+  }
+  .track-thumb.local-icon{
+    display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--text-sec);
+  }
+  .track-info{min-width:0;}
+  .track-title{font-size:14.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .track-sub{font-size:12.5px;color:var(--text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .icon-btn{
+    background:none;border:none;color:var(--text-sec);cursor:pointer;font-size:17px;
+    padding:6px;border-radius:50%;line-height:1;
+  }
+  .icon-btn:hover{color:var(--text);}
+  .icon-btn.play-btn:hover{color:var(--accent);}
+  .icon-btn.star.active{color:var(--accent);}
+  .empty-state{color:var(--text-sec);font-size:14px;padding:30px 4px;max-width:480px;line-height:1.5;}
+  .empty-state code{background:var(--bg-hi);padding:2px 6px;border-radius:4px;}
+  .drive-status{
+    display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:8px;
+    background:var(--bg-elev);margin-bottom:20px;max-width:520px;font-size:13.5px;color:var(--text-sec);
+  }
+  .drive-status .dot-ok{width:8px;height:8px;border-radius:50%;background:var(--accent);display:inline-block;flex-shrink:0;}
+  .drive-status .dot-off{width:8px;height:8px;border-radius:50%;background:var(--text-sec);display:inline-block;flex-shrink:0;}
+  .settings-box{max-width:480px;}
+  .settings-box label{font-size:13px;color:var(--text-sec);display:block;margin-bottom:6px;}
+  .settings-box input[type=text]{
+    width:100%;padding:10px 14px;border-radius:6px;border:1px solid var(--border);
+    background:var(--bg-elev);color:var(--text);font-size:14px;margin-bottom:10px;
+  }
+  .settings-box .help{font-size:12.5px;color:var(--text-sec);line-height:1.6;margin:10px 0 20px;}
+  .settings-box .help a{color:var(--accent);}
+  .settings-box .section-title{font-size:15px;font-weight:700;margin:26px 0 10px;}
+  .settings-box .section-title:first-child{margin-top:0;}
+  .row-actions{display:flex;gap:6px;align-items:center;}
+
+  /* MODAL */
+  #modal-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,0.6);display:none;
+    align-items:center;justify-content:center;z-index:50;
+  }
+  #modal-overlay.show{display:flex;}
+  #modal-box{
+    background:var(--bg-elev);border-radius:10px;padding:20px;width:320px;
+    max-height:70vh;overflow-y:auto;
+  }
+  #modal-box h3{margin:0 0 14px;font-size:16px;}
+  .modal-playlist-item{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:9px 10px;border-radius:6px;cursor:pointer;font-size:14px;
+  }
+  .modal-playlist-item:hover{background:var(--bg-hi);}
+  #new-pl-inline{display:flex;gap:8px;margin-top:12px;}
+  #new-pl-inline input{
+    flex:1;padding:8px 10px;border-radius:6px;border:1px solid var(--border);
+    background:var(--bg-hi);color:var(--text);
+  }
+  #modal-close{
+    margin-top:14px;width:100%;padding:9px;border-radius:20px;border:none;
+    background:var(--bg-hi);color:var(--text);cursor:pointer;font-weight:600;
+  }
+
+  /* PLAYER BAR */
+  #player-bar{
+    grid-row:2;grid-column:1/3;
+    background:var(--bg-elev);border-top:1px solid var(--border);
+    display:grid;grid-template-columns:280px 1fr 200px;align-items:center;
+    padding:0 16px;gap:16px;
+  }
+  #now-playing{display:flex;align-items:center;gap:12px;min-width:0;}
+  #yt-visual{width:56px;height:56px;border-radius:4px;overflow:hidden;background:#000;flex-shrink:0;display:none;}
+  #yt-visual.show{display:block;}
+  #local-visual{
+    width:56px;height:56px;border-radius:4px;background:var(--bg-hi);flex-shrink:0;
+    display:flex;align-items:center;justify-content:center;font-size:20px;color:var(--text-sec);
+  }
+  #now-playing-info{min-width:0;}
+  #np-title{font-size:13.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #np-sub{font-size:12px;color:var(--text-sec);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #player-center{display:flex;flex-direction:column;align-items:center;gap:6px;}
+  #transport{display:flex;align-items:center;gap:18px;}
+  #transport button{background:none;border:none;color:var(--text-sec);cursor:pointer;font-size:16px;}
+  #transport button:hover{color:var(--text);}
+  #play-pause{
+    background:var(--text);color:#000;border-radius:50%;width:30px;height:30px;
+    display:flex;align-items:center;justify-content:center;font-size:13px;
+  }
+  #play-pause:hover{transform:scale(1.05);background:var(--text);}
+  #seek-row{display:flex;align-items:center;gap:8px;width:100%;max-width:480px;}
+  #seek-row span{font-size:11px;color:var(--text-sec);width:36px;text-align:center;}
+  input[type=range]{-webkit-appearance:none;height:4px;border-radius:2px;background:var(--bg-hi2);flex:1;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;border-radius:50%;background:var(--text);cursor:pointer;}
+  #player-right{display:flex;align-items:center;justify-content:flex-end;gap:10px;}
+  #player-right #volume{width:90px;}
+  .toggle-btn.active{color:var(--accent) !important;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div id="sidebar">
+    <div id="logo"><span class="dot"></span>MiTube Música</div>
+    <div class="nav-group">
+      <div class="nav-item active" data-view="search"><span class="ic">🔍</span>Buscar en YouTube</div>
+      <div class="nav-item" data-view="library"><span class="ic">🎵</span>Mi Música (Drive)</div>
+      <div class="nav-item" data-view="favorites"><span class="ic">★</span>Favoritos</div>
+      <div class="nav-item" data-view="settings"><span class="ic">⚙</span>Ajustes</div>
+    </div>
+    <div>
+      <div id="playlists-header">
+        <span>Playlists</span>
+        <button id="new-playlist-btn" title="Nueva playlist">＋</button>
+      </div>
+      <div id="playlist-list"></div>
+    </div>
+  </div>
+
+  <div id="main"></div>
+
+  <div id="modal-overlay">
+    <div id="modal-box"></div>
+  </div>
+
+  <div id="player-bar">
+    <div id="now-playing">
+      <div id="yt-visual"><div id="yt-player"></div></div>
+      <div id="local-visual">♪</div>
+      <div id="now-playing-info">
+        <div id="np-title">Nada sonando</div>
+        <div id="np-sub">—</div>
+      </div>
+    </div>
+    <div id="player-center">
+      <div id="transport">
+        <button id="shuffle-btn" class="toggle-btn" title="Aleatorio">🔀</button>
+        <button id="prev-btn" title="Anterior">⏮</button>
+        <button id="play-pause" title="Reproducir/Pausa">▶</button>
+        <button id="next-btn" title="Siguiente">⏭</button>
+        <button id="repeat-btn" class="toggle-btn" title="Repetir">🔁</button>
+      </div>
+      <div id="seek-row">
+        <span id="time-cur">0:00</span>
+        <input type="range" id="seek" min="0" max="100" value="0">
+        <span id="time-dur">0:00</span>
+      </div>
+    </div>
+    <div id="player-right">
+      <span>🔊</span>
+      <input type="range" id="volume" min="0" max="100" value="80">
+    </div>
+  </div>
+
+</div>
+
+<script src="https://www.youtube.com/iframe_api"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+/* ============ STORAGE HELPERS ============ */
+const LS = {
+  get(key, fallback){ try{ const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }catch(e){ return fallback; } },
+  set(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
+};
+
+let apiKey = LS.get('mm_apiKey', '');
+let playlists = LS.get('mm_playlists', []);        // [{id,name,tracks:[track,...]}]
+let favorites = LS.get('mm_favorites', []);        // [track,...]
+let clientId = LS.get('mm_clientId', '');          // Google OAuth Client ID
+let driveFolderId = LS.get('mm_driveFolderId', ''); // Drive folder ID holding the music
+
+function saveAll(){
+  LS.set('mm_apiKey', apiKey);
+  LS.set('mm_playlists', playlists);
+  LS.set('mm_favorites', favorites);
+  LS.set('mm_clientId', clientId);
+  LS.set('mm_driveFolderId', driveFolderId);
+}
+
+/* ============ GOOGLE DRIVE STATE (in-memory only, not persisted) ============ */
+let driveAccessToken = null;
+let driveTokenClient = null;
+let driveConnected = false;
+let driveUserEmail = '';
+let driveLibrary = []; // [{kind:'drive', id, title, subtitle}]
+
+function ensureTokenClient(){
+  if(!window.google || !google.accounts || !google.accounts.oauth2) return null;
+  if(!clientId) return null;
+  if(!driveTokenClient || driveTokenClient.__clientId !== clientId){
+    driveTokenClient = google.accounts.oauth2.initTokenClient({
+      client_id: clientId,
+      scope: 'https://www.googleapis.com/auth/drive.readonly https://www.googleapis.com/auth/userinfo.email',
+      callback: async (resp)=>{
+        if(resp.error){ alert('Error al conectar con Google: ' + resp.error); return; }
+        driveAccessToken = resp.access_token;
+        driveConnected = true;
+        await fetchDriveUserEmail();
+        await loadDriveLibrary();
+        renderView();
+      }
+    });
+    driveTokenClient.__clientId = clientId;
+  }
+  return driveTokenClient;
+}
+function connectDrive(){
+  const tc = ensureTokenClient();
+  if(!tc){ alert('Antes configura el Client ID de Google en Ajustes.'); return; }
+  tc.requestAccessToken({ prompt: 'select_account' });
+}
+function disconnectDrive(){
+  driveAccessToken = null;
+  driveConnected = false;
+  driveUserEmail = '';
+  driveLibrary = [];
+  renderView();
+}
+async function fetchDriveUserEmail(){
+  try{
+    const res = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', { headers:{ Authorization:'Bearer '+driveAccessToken } });
+    const data = await res.json();
+    driveUserEmail = data.email || '';
+  }catch(e){ driveUserEmail = ''; }
+}
+async function loadDriveLibrary(){
+  if(!driveAccessToken || !driveFolderId){ driveLibrary = []; return; }
+  const q = encodeURIComponent(`'${driveFolderId}' in parents and mimeType contains 'audio/' and trashed = false`);
+  const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)&pageSize=1000`;
+  try{
+    const res = await fetch(url, { headers:{ Authorization:'Bearer '+driveAccessToken } });
+    const data = await res.json();
+    if(data.error){
+      if(data.error.code === 401){ disconnectDrive(); alert('Tu sesión de Google caducó. Vuelve a pulsar "Conectar con Google".'); }
+      else alert('Error de Google Drive: ' + data.error.message);
+      driveLibrary = [];
+      return;
+    }
+    driveLibrary = (data.files||[]).map(f=>({ kind:'drive', id:f.id, title:f.name.replace(/\.[^/.]+$/,''), subtitle:'Mi Música (Drive)' }));
+  }catch(e){
+    alert('No se pudo conectar con Google Drive. Revisa tu conexión.');
+    driveLibrary = [];
+  }
+}
+async function fetchDriveBlob(fileId){
+  try{
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers:{ Authorization:'Bearer '+driveAccessToken } });
+    if(!res.ok){
+      if(res.status === 401){ disconnectDrive(); alert('Tu sesión de Google caducó. Vuelve a "Mi Música (Drive)" y pulsa Conectar.'); }
+      return null;
+    }
+    return await res.blob();
+  }catch(e){ return null; }
+}
+
+/* ============ STATE ============ */
+let currentView = 'search';
+let currentPlaylistId = null;
+let searchResults = [];
+let queue = [];          // array of track objects currently playing through
+let queueIndex = -1;
+let currentTrack = null;
+let isPlaying = false;
+let shuffleOn = false;
+let repeatMode = 'off';  // off | all | one
+let currentObjectUrl = null;
+
+let ytPlayer = null;
+let ytReady = false;
+const localAudio = new Audio();
+
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+/* ============ YOUTUBE PLAYER ============ */
+function onYouTubeIframeAPIReady(){
+  ytPlayer = new YT.Player('yt-player', {
+    height:'56', width:'56',
+    playerVars:{ autoplay:0, controls:0, disablekb:1, modestbranding:1 },
+    events:{
+      onReady: ()=>{ ytReady = true; ytPlayer.setVolume(document.getElementById('volume').value); },
+      onStateChange: onYtStateChange
+    }
+  });
+}
+function onYtStateChange(e){
+  if(e.data === YT.PlayerState.ENDED){ handleTrackEnded(); }
+  if(e.data === YT.PlayerState.PLAYING){ isPlaying = true; updatePlayPauseIcon(); }
+  if(e.data === YT.PlayerState.PAUSED){ isPlaying = false; updatePlayPauseIcon(); }
+}
+
+localAudio.addEventListener('ended', handleTrackEnded);
+localAudio.addEventListener('play', ()=>{ isPlaying = true; updatePlayPauseIcon(); });
+localAudio.addEventListener('pause', ()=>{ isPlaying = false; updatePlayPauseIcon(); });
+
+/* ============ PLAYBACK CONTROL ============ */
+function trackKey(t){ return t.kind + ':' + t.id; }
+
+function playQueueAt(list, index){
+  queue = list.slice();
+  queueIndex = index;
+  loadTrack(queue[queueIndex]);
+}
+
+function loadTrack(track){
+  currentTrack = track;
+  if(ytReady) ytPlayer.stopVideo();
+  localAudio.pause();
+  if(currentObjectUrl){ URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
+
+  const ytVisual = document.getElementById('yt-visual');
+  const localVisual = document.getElementById('local-visual');
+
+  if(track.kind === 'yt'){
+    ytVisual.classList.add('show');
+    localVisual.style.display = 'none';
+    if(ytReady){ ytPlayer.loadVideoById(track.id); }
+  } else if(track.kind === 'drive'){
+    ytVisual.classList.remove('show');
+    localVisual.style.display = 'flex';
+    fetchDriveBlob(track.id).then(blob=>{
+      if(!blob){ isPlaying=false; updatePlayPauseIcon(); return; }
+      currentObjectUrl = URL.createObjectURL(blob);
+      localAudio.src = currentObjectUrl;
+      localAudio.play();
+    });
+  }
+  document.getElementById('np-title').textContent = track.title;
+  document.getElementById('np-sub').textContent = track.subtitle || '';
+  isPlaying = true;
+  updatePlayPauseIcon();
+}
+
+function togglePlayPause(){
+  if(!currentTrack) return;
+  if(currentTrack.kind === 'yt'){
+    if(isPlaying){ ytPlayer.pauseVideo(); } else { ytPlayer.playVideo(); }
+  } else {
+    if(isPlaying){ localAudio.pause(); } else { localAudio.play(); }
+  }
+}
+function updatePlayPauseIcon(){
+  document.getElementById('play-pause').textContent = isPlaying ? '⏸' : '▶';
+}
+
+function handleTrackEnded(){
+  if(repeatMode === 'one'){ loadTrack(currentTrack); return; }
+  nextTrack();
+}
+function nextIndex(){
+  if(queue.length === 0) return -1;
+  if(shuffleOn){ return Math.floor(Math.random()*queue.length); }
+  if(queueIndex + 1 < queue.length) return queueIndex + 1;
+  return repeatMode === 'all' ? 0 : -1;
+}
+function prevIndex(){
+  if(queue.length === 0) return -1;
+  if(shuffleOn){ return Math.floor(Math.random()*queue.length); }
+  if(queueIndex - 1 >= 0) return queueIndex - 1;
+  return repeatMode === 'all' ? queue.length-1 : -1;
+}
+function nextTrack(){
+  const ni = nextIndex();
+  if(ni === -1){ isPlaying=false; updatePlayPauseIcon(); return; }
+  queueIndex = ni;
+  loadTrack(queue[queueIndex]);
+}
+function prevTrack(){
+  const cur = currentTrack && currentTrack.kind === 'yt' ? ytPlayer.getCurrentTime() : localAudio.currentTime;
+  if(cur > 3){ loadTrack(currentTrack); return; }
+  const pi = prevIndex();
+  if(pi === -1) return;
+  queueIndex = pi;
+  loadTrack(queue[queueIndex]);
+}
+
+document.getElementById('play-pause').onclick = togglePlayPause;
+document.getElementById('next-btn').onclick = nextTrack;
+document.getElementById('prev-btn').onclick = prevTrack;
+document.getElementById('shuffle-btn').onclick = (e)=>{ shuffleOn = !shuffleOn; e.target.classList.toggle('active', shuffleOn); };
+document.getElementById('repeat-btn').onclick = (e)=>{
+  repeatMode = repeatMode === 'off' ? 'all' : repeatMode === 'all' ? 'one' : 'off';
+  e.target.classList.toggle('active', repeatMode !== 'off');
+  e.target.textContent = repeatMode === 'one' ? '🔂' : '🔁';
+};
+document.getElementById('volume').oninput = (e)=>{
+  const v = e.target.value;
+  localAudio.volume = v/100;
+  if(ytReady) ytPlayer.setVolume(v);
+};
+
+/* seek bar */
+let seekDragging = false;
+const seekEl = document.getElementById('seek');
+seekEl.addEventListener('input', ()=>{ seekDragging = true; });
+seekEl.addEventListener('change', ()=>{
+  const pct = seekEl.value/100;
+  if(!currentTrack) return;
+  if(currentTrack.kind === 'yt'){
+    const dur = ytPlayer.getDuration();
+    ytPlayer.seekTo(dur*pct, true);
+  } else {
+    localAudio.currentTime = localAudio.duration * pct;
+  }
+  seekDragging = false;
+});
+function fmtTime(s){
+  if(!isFinite(s) || s < 0) s = 0;
+  const m = Math.floor(s/60), sec = Math.floor(s%60);
+  return m + ':' + String(sec).padStart(2,'0');
+}
+setInterval(()=>{
+  if(!currentTrack) return;
+  let cur=0, dur=0;
+  if(currentTrack.kind === 'yt' && ytReady){ cur = ytPlayer.getCurrentTime()||0; dur = ytPlayer.getDuration()||0; }
+  else if(currentTrack.kind === 'drive'){ cur = localAudio.currentTime||0; dur = localAudio.duration||0; }
+  document.getElementById('time-cur').textContent = fmtTime(cur);
+  document.getElementById('time-dur').textContent = fmtTime(dur);
+  if(!seekDragging && dur>0){ seekEl.value = (cur/dur)*100; }
+}, 500);
+
+/* ============ SEARCH (YouTube Data API v3) ============ */
+async function doSearch(query){
+  if(!apiKey){ renderSearchView(); return; }
+  const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=20&type=video&videoCategoryId=10&q=${encodeURIComponent(query)}&key=${apiKey}`;
+  try{
+    const res = await fetch(url);
+    const data = await res.json();
+    if(data.error){
+      searchResults = [];
+      alert('Error de la API de YouTube: ' + data.error.message);
+      renderSearchView();
+      return;
+    }
+    searchResults = (data.items||[]).filter(it=>it.id.videoId).map(it=>({
+      kind:'yt',
+      id: it.id.videoId,
+      title: it.snippet.title,
+      subtitle: it.snippet.channelTitle,
+      thumb: it.snippet.thumbnails && (it.snippet.thumbnails.default||{}).url
+    }));
+  }catch(err){
+    alert('No se pudo conectar con YouTube. Revisa tu conexión o tu API key.');
+  }
+  renderSearchView();
+}
+
+/* ============ PLAYLISTS / FAVORITES LOGIC ============ */
+function isFavorite(track){ return favorites.some(f=>trackKey(f)===trackKey(track)); }
+function toggleFavorite(track){
+  if(isFavorite(track)){
+    favorites = favorites.filter(f=>trackKey(f)!==trackKey(track));
+  } else {
+    favorites.push(track);
+  }
+  saveAll();
+  renderView();
+}
+function createPlaylist(name){
+  if(!name || !name.trim()) return null;
+  const pl = { id: uid(), name: name.trim(), tracks: [] };
+  playlists.push(pl);
+  saveAll();
+  renderSidebarPlaylists();
+  return pl;
+}
+function deletePlaylist(id){
+  playlists = playlists.filter(p=>p.id!==id);
+  if(currentPlaylistId === id){ currentView='search'; currentPlaylistId=null; }
+  saveAll();
+  renderSidebarPlaylists();
+  renderView();
+}
+function addTrackToPlaylist(playlistId, track){
+  const pl = playlists.find(p=>p.id===playlistId);
+  if(!pl) return;
+  if(!pl.tracks.some(t=>trackKey(t)===trackKey(track))) pl.tracks.push(track);
+  saveAll();
+  renderView();
+}
+function removeTrackFromPlaylist(playlistId, track){
+  const pl = playlists.find(p=>p.id===playlistId);
+  if(!pl) return;
+  pl.tracks = pl.tracks.filter(t=>trackKey(t)!==trackKey(track));
+  saveAll();
+  renderView();
+}
+
+/* ============ MODAL: add to playlist ============ */
+function openAddToPlaylistModal(track){
+  const overlay = document.getElementById('modal-overlay');
+  const box = document.getElementById('modal-box');
+  box.innerHTML = `<h3>Añadir a playlist</h3><div id="modal-pl-list"></div>
+    <div id="new-pl-inline">
+      <input id="modal-new-pl-name" type="text" placeholder="Nueva playlist...">
+      <button class="primary-btn" id="modal-create-pl" style="padding:8px 14px;">Crear</button>
+    </div>
+    <button id="modal-close">Cerrar</button>`;
+  const list = box.querySelector('#modal-pl-list');
+  function renderList(){
+    list.innerHTML = playlists.length
+      ? playlists.map(p=>`<div class="modal-playlist-item" data-pl="${p.id}">${escapeHtml(p.name)}<span>${p.tracks.some(t=>trackKey(t)===trackKey(track))?'✓':'＋'}</span></div>`).join('')
+      : '<div style="color:var(--text-sec);font-size:13px;padding:8px 0;">Aún no tienes playlists.</div>';
+    list.querySelectorAll('.modal-playlist-item').forEach(el=>{
+      el.onclick = ()=>{
+        const pl = playlists.find(p=>p.id===el.dataset.pl);
+        const has = pl.tracks.some(t=>trackKey(t)===trackKey(track));
+        if(has) removeTrackFromPlaylist(pl.id, track); else addTrackToPlaylist(pl.id, track);
+        renderList();
+      };
+    });
+  }
+  renderList();
+  box.querySelector('#modal-create-pl').onclick = ()=>{
+    const name = box.querySelector('#modal-new-pl-name').value;
+    const pl = createPlaylist(name);
+    if(pl){ addTrackToPlaylist(pl.id, track); box.querySelector('#modal-new-pl-name').value=''; renderList(); }
+  };
+  box.querySelector('#modal-close').onclick = ()=>{ overlay.classList.remove('show'); };
+  overlay.classList.add('show');
+}
+
+/* ============ RENDERING ============ */
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function trackRowHtml(track, index, list, extraBtns){
+  const fav = isFavorite(track);
+  const thumb = track.kind==='yt' && track.thumb
+    ? `<img class="track-thumb" src="${track.thumb}">`
+    : `<div class="track-thumb local-icon">♪</div>`;
+  return `<div class="track-row" data-idx="${index}">
+    ${thumb}
+    <div class="track-info">
+      <div class="track-title">${escapeHtml(track.title)}</div>
+      <div class="track-sub">${escapeHtml(track.subtitle||'')}</div>
+    </div>
+    <button class="icon-btn play-btn" data-action="play" data-idx="${index}" title="Reproducir">▶</button>
+    <button class="icon-btn star ${fav?'active':''}" data-action="fav" data-idx="${index}" title="Favorito">${fav?'★':'☆'}</button>
+    <button class="icon-btn" data-action="addpl" data-idx="${index}" title="Añadir a playlist">＋</button>
+    ${extraBtns ? extraBtns(track,index) : ''}
+  </div>`;
+}
+function wireTrackRows(container, list){
+  container.querySelectorAll('[data-action="play"]').forEach(b=>{
+    b.onclick = ()=> playQueueAt(list, parseInt(b.dataset.idx));
+  });
+  container.querySelectorAll('[data-action="fav"]').forEach(b=>{
+    b.onclick = ()=> toggleFavorite(list[parseInt(b.dataset.idx)]);
+  });
+  container.querySelectorAll('[data-action="addpl"]').forEach(b=>{
+    b.onclick = ()=> openAddToPlaylistModal(list[parseInt(b.dataset.idx)]);
+  });
+  container.querySelectorAll('[data-action="removepl"]').forEach(b=>{
+    b.onclick = ()=>{ removeTrackFromPlaylist(currentPlaylistId, list[parseInt(b.dataset.idx)]); };
+  });
+}
+
+function renderSidebarPlaylists(){
+  const el = document.getElementById('playlist-list');
+  el.innerHTML = playlists.map(p=>`
+    <div class="playlist-row ${currentView==='playlist' && currentPlaylistId===p.id?'active':''}" data-id="${p.id}">
+      <span>${escapeHtml(p.name)}</span>
+      <button class="del" data-id="${p.id}">✕</button>
+    </div>`).join('');
+  el.querySelectorAll('.playlist-row').forEach(row=>{
+    row.onclick = (e)=>{
+      if(e.target.classList.contains('del')) return;
+      currentView='playlist'; currentPlaylistId=row.dataset.id;
+      setActiveNav(null);
+      renderSidebarPlaylists();
+      renderView();
+    };
+  });
+  el.querySelectorAll('.del').forEach(btn=>{
+    btn.onclick = (e)=>{ e.stopPropagation(); if(confirm('¿Eliminar esta playlist?')) deletePlaylist(btn.dataset.id); };
+  });
+}
+function setActiveNav(view){
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active', n.dataset.view===view));
+}
+
+function renderView(){
+  if(currentView==='search') renderSearchView();
+  else if(currentView==='library') renderLibraryView();
+  else if(currentView==='favorites') renderFavoritesView();
+  else if(currentView==='settings') renderSettingsView();
+  else if(currentView==='playlist') renderPlaylistView();
+}
+
+function renderSearchView(){
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <h1 class="view-title">Buscar en YouTube</h1>
+    <p class="view-sub">Escucha cualquier canción a través del reproductor oficial de YouTube.</p>
+    <div id="search-bar">
+      <input id="search-input" type="text" placeholder="Busca un artista o canción...">
+      <button class="primary-btn" id="search-go-btn">Buscar</button>
+    </div>
+    <div id="search-results"></div>
+  `;
+  const input = document.getElementById('search-input');
+  document.getElementById('search-go-btn').onclick = ()=> input.value.trim() && doSearch(input.value.trim());
+  input.onkeydown = (e)=>{ if(e.key==='Enter' && input.value.trim()) doSearch(input.value.trim()); };
+
+  const resultsEl = document.getElementById('search-results');
+  if(!apiKey){
+    resultsEl.innerHTML = `<div class="empty-state">Para buscar necesitas una API key gratuita de YouTube Data API v3.
+      Ve a <b>Ajustes</b> en el menú lateral y pégala ahí.</div>`;
+    return;
+  }
+  if(searchResults.length===0){
+    resultsEl.innerHTML = `<div class="empty-state">Escribe algo y pulsa "Buscar" para empezar.</div>`;
+    return;
+  }
+  resultsEl.innerHTML = `<div class="track-list">${searchResults.map((t,i)=>trackRowHtml(t,i,searchResults)).join('')}</div>`;
+  wireTrackRows(resultsEl, searchResults);
+}
+
+function renderLibraryView(){
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <h1 class="view-title">Mi Música (Drive)</h1>
+    <p class="view-sub">Los audios que tengas en tu carpeta de Google Drive, disponibles desde cualquier dispositivo.</p>
+    <div id="drive-area"></div>
+  `;
+  const area = document.getElementById('drive-area');
+
+  if(!clientId || !driveFolderId){
+    area.innerHTML = `<div class="empty-state">Antes de usar esto, configura en <b>Ajustes</b> tu Client ID de Google y el ID de la carpeta de Drive donde tienes tu música.</div>`;
+    return;
+  }
+  if(!driveConnected){
+    area.innerHTML = `
+      <div class="drive-status"><span class="dot-off"></span>No conectado a Google Drive</div>
+      <button class="primary-btn" id="connect-drive-btn">Conectar con Google</button>
+    `;
+    document.getElementById('connect-drive-btn').onclick = connectDrive;
+    return;
+  }
+  area.innerHTML = `
+    <div class="drive-status"><span class="dot-ok"></span>Conectado${driveUserEmail ? ' como '+escapeHtml(driveUserEmail) : ''}</div>
+    <div style="display:flex;gap:10px;margin-bottom:20px;">
+      <button class="ghost-btn" id="refresh-drive-btn">Actualizar lista</button>
+      <button class="ghost-btn" id="disconnect-drive-btn">Desconectar</button>
+    </div>
+    <div id="drive-list"></div>
+  `;
+  document.getElementById('refresh-drive-btn').onclick = async ()=>{ await loadDriveLibrary(); renderLibraryView(); };
+  document.getElementById('disconnect-drive-btn').onclick = disconnectDrive;
+
+  const listEl = document.getElementById('drive-list');
+  if(driveLibrary.length===0){
+    listEl.innerHTML = `<div class="empty-state">No se encontraron audios en esa carpeta de Drive. Sube archivos de audio a esa carpeta y pulsa "Actualizar lista".</div>`;
+    return;
+  }
+  listEl.innerHTML = `<div class="track-list">${driveLibrary.map((t,i)=>trackRowHtml(t,i,driveLibrary)).join('')}</div>`;
+  wireTrackRows(listEl, driveLibrary);
+}
+
+function renderFavoritesView(){
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <h1 class="view-title">Favoritos</h1>
+    <p class="view-sub">Tus canciones marcadas con ★, de YouTube y de tu música en Drive.</p>
+    <div id="fav-list"></div>
+  `;
+  const favEl = document.getElementById('fav-list');
+  if(favorites.length===0){
+    favEl.innerHTML = `<div class="empty-state">Aún no tienes favoritos. Pulsa la ☆ en cualquier canción para añadirla aquí.</div>`;
+    return;
+  }
+  favEl.innerHTML = `<div class="track-list">${favorites.map((t,i)=>trackRowHtml(t,i,favorites)).join('')}</div>`;
+  wireTrackRows(favEl, favorites);
+}
+
+function renderPlaylistView(){
+  const pl = playlists.find(p=>p.id===currentPlaylistId);
+  const main = document.getElementById('main');
+  if(!pl){ currentView='search'; renderSearchView(); return; }
+  main.innerHTML = `
+    <h1 class="view-title">${escapeHtml(pl.name)}</h1>
+    <p class="view-sub">${pl.tracks.length} canción(es)</p>
+    <div id="pl-list"></div>
+  `;
+  const plEl = document.getElementById('pl-list');
+  if(pl.tracks.length===0){
+    plEl.innerHTML = `<div class="empty-state">Esta playlist está vacía. Añade canciones desde Buscar, Mi Música o Favoritos con el botón ＋.</div>`;
+    return;
+  }
+  plEl.innerHTML = `<div class="track-list">${pl.tracks.map((t,i)=>trackRowHtml(t,i,pl.tracks,(t,i)=>`<button class="icon-btn" data-action="removepl" data-idx="${i}" title="Quitar de la playlist">✕</button>`)).join('')}</div>`;
+  wireTrackRows(plEl, pl.tracks);
+}
+
+function renderSettingsView(){
+  const main = document.getElementById('main');
+  main.innerHTML = `
+    <h1 class="view-title">Ajustes</h1>
+    <div class="settings-box">
+
+      <div class="section-title">YouTube (buscador)</div>
+      <label>API key de YouTube Data API v3</label>
+      <input type="text" id="apikey-input" value="${escapeHtml(apiKey)}" placeholder="Pega aquí tu API key">
+      <div class="help">
+        console.cloud.google.com → crea un proyecto → activa "YouTube Data API v3" → Credenciales → Crear credenciales → Clave de API.
+        Capa gratuita: ~100 búsquedas/día.
+      </div>
+
+      <div class="section-title">Google Drive (tu música)</div>
+      <label>Client ID de OAuth (Google Cloud Console)</label>
+      <input type="text" id="clientid-input" value="${escapeHtml(clientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com">
+      <label>ID de la carpeta de Drive con tu música</label>
+      <input type="text" id="folderid-input" value="${escapeHtml(driveFolderId)}" placeholder="El ID que sale en la URL de la carpeta">
+      <div class="help">
+        <b>Pasos (usa la cuenta de Google donde quieras guardar la música):</b><br>
+        1. Crea una carpeta en Google Drive (ej. "MiTubeMusica") y sube ahí tus audios.<br>
+        2. Abre esa carpeta en el navegador; copia el ID que aparece al final de la URL
+        (drive.google.com/drive/folders/<b>ESTE-TROZO</b>) y pégalo arriba.<br>
+        3. En console.cloud.google.com crea un proyecto → activa "Google Drive API".<br>
+        4. "Pantalla de consentimiento OAuth" → Externo → añade tu email como usuario de prueba.<br>
+        5. "Credenciales" → "Crear credenciales" → "ID de cliente de OAuth" → tipo <b>Aplicación web</b> →
+        en "Orígenes de JavaScript autorizados" añade la URL exacta donde esté publicada esta app (https://...).<br>
+        6. Copia el Client ID que te da y pégalo arriba.
+      </div>
+
+      <button class="primary-btn" id="save-settings-btn">Guardar ajustes</button>
+    </div>
+  `;
+  document.getElementById('save-settings-btn').onclick = ()=>{
+    apiKey = document.getElementById('apikey-input').value.trim();
+    clientId = document.getElementById('clientid-input').value.trim();
+    driveFolderId = document.getElementById('folderid-input').value.trim();
+    saveAll();
+    alert('Guardado.');
+  };
+}
+
+/* ============ NAV WIRING ============ */
+document.querySelectorAll('.nav-item').forEach(item=>{
+  item.onclick = ()=>{
+    currentView = item.dataset.view;
+    currentPlaylistId = null;
+    setActiveNav(currentView);
+    renderSidebarPlaylists();
+    renderView();
+  };
+});
+document.getElementById('new-playlist-btn').onclick = ()=>{
+  const name = prompt('Nombre de la nueva playlist:');
+  if(name) createPlaylist(name);
+};
+
+/* ============ INIT ============ */
+renderSidebarPlaylists();
+renderView();
+</script>
+</body>
+</html>
