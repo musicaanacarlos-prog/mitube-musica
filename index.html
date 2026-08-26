@@ -287,11 +287,17 @@ const LS = {
   set(key, val){ localStorage.setItem(key, JSON.stringify(val)); }
 };
 
+// Estos dos valores son configuración fija de ESTA app (no son secretos personales
+// tuyos), por eso van escritos aquí directamente: así funciona en cualquier
+// dispositivo/navegador sin tener que copiarlos a mano en Ajustes cada vez.
+const DEFAULT_CLIENT_ID = '378098120223-0uc17lema3da6o39nsmrt04adjf9vfpo.apps.googleusercontent.com';
+const DEFAULT_DRIVE_FOLDER_ID = '1ofbYC7sas1O4c_Ag6bJ90txMUT0QIeoI';
+
 let apiKey = LS.get('mm_apiKey', '');
 let playlists = LS.get('mm_playlists', []);        // [{id,name,tracks:[track,...]}]
 let favorites = LS.get('mm_favorites', []);        // [track,...]
-let clientId = LS.get('mm_clientId', '');          // Google OAuth Client ID
-let driveFolderId = LS.get('mm_driveFolderId', ''); // Drive folder ID holding the music
+let clientId = LS.get('mm_clientId', DEFAULT_CLIENT_ID);          // Google OAuth Client ID
+let driveFolderId = LS.get('mm_driveFolderId', DEFAULT_DRIVE_FOLDER_ID); // Drive folder ID holding the music
 
 function saveAll(){
   LS.set('mm_apiKey', apiKey);
@@ -878,20 +884,19 @@ function renderSettingsView(){
       </div>
 
       <div class="section-title">Google Drive (tu música)</div>
+      <div class="help">
+        Estos dos campos ya vienen configurados de fábrica para esta app: funcionan igual en
+        cualquier dispositivo o navegador sin que tengas que tocarlos. Solo cambia algo aquí
+        si en algún momento quieres usar otra carpeta de Drive u otro proyecto de Google Cloud.
+      </div>
       <label>Client ID de OAuth (Google Cloud Console)</label>
       <input type="text" id="clientid-input" value="${escapeHtml(clientId)}" placeholder="xxxxxxxx.apps.googleusercontent.com">
       <label>ID de la carpeta de Drive con tu música</label>
       <input type="text" id="folderid-input" value="${escapeHtml(driveFolderId)}" placeholder="El ID que sale en la URL de la carpeta">
       <div class="help">
-        <b>Pasos (usa la cuenta de Google donde quieras guardar la música):</b><br>
-        1. Crea una carpeta en Google Drive (ej. "MiTubeMusica") y sube ahí tus audios.<br>
-        2. Abre esa carpeta en el navegador; copia el ID que aparece al final de la URL
-        (drive.google.com/drive/folders/<b>ESTE-TROZO</b>) y pégalo arriba.<br>
-        3. En console.cloud.google.com crea un proyecto → activa "Google Drive API".<br>
-        4. "Pantalla de consentimiento OAuth" → Externo → añade tu email como usuario de prueba.<br>
-        5. "Credenciales" → "Crear credenciales" → "ID de cliente de OAuth" → tipo <b>Aplicación web</b> →
-        en "Orígenes de JavaScript autorizados" añade la URL exacta donde esté publicada esta app (https://...).<br>
-        6. Copia el Client ID que te da y pégalo arriba.
+        <b>Si quieres cambiar la carpeta de Drive:</b><br>
+        Abre la carpeta en el navegador y copia el ID que aparece al final de la URL
+        (drive.google.com/drive/folders/<b>ESTE-TROZO</b>), pégalo arriba y pulsa "Guardar ajustes".
       </div>
 
       <button class="primary-btn" id="save-settings-btn">Guardar ajustes</button>
