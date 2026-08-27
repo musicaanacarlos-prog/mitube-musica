@@ -240,6 +240,17 @@
   #player-right #volume{width:90px;}
   .toggle-btn.active{color:var(--accent) !important;}
 
+  /* RESUME BANNER (tras recuperar una reproducción interrumpida en segundo plano) */
+  #resume-banner{
+    display:none;
+    position:fixed;left:16px;right:16px;bottom:108px;z-index:45;
+    background:var(--bg-hi);border:1px solid var(--border);border-radius:10px;
+    padding:12px 14px;align-items:center;justify-content:space-between;gap:12px;
+    box-shadow:0 6px 20px rgba(0,0,0,0.4);max-width:520px;margin:0 auto;
+  }
+  #resume-banner.show{display:flex;}
+  #resume-text{font-size:13.5px;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+
   /* ============ MÓVIL / PANTALLAS ESTRECHAS ============ */
   @media (max-width: 860px){
     body{overflow-x:hidden;overflow-y:auto;}
@@ -280,6 +291,7 @@
     .track-row [data-action="addpl"]{display:none;} /* menos botones por fila para dejar sitio al título */
     #search-bar{max-width:none;}
     .settings-box{max-width:none;}
+    #resume-banner{left:10px;right:10px;bottom:180px;flex-wrap:wrap;}
   }
 </style>
 </head>
@@ -310,6 +322,14 @@
 
   <div id="modal-overlay">
     <div id="modal-box"></div>
+  </div>
+
+  <div id="resume-banner">
+    <span id="resume-text"></span>
+    <div class="row-actions">
+      <button id="resume-btn" class="ghost-btn">Reanudar</button>
+      <button id="resume-dismiss" class="icon-btn" title="Descartar">✕</button>
+    </div>
   </div>
 
   <div id="player-bar">
@@ -490,6 +510,7 @@ let isPlaying = false;
 let shuffleOn = false;
 let repeatMode = 'off';  // off | all | one
 let currentObjectUrl = null;
+let pendingSeekPosition = null; // usado al recuperar una sesión guardada (ver RESUME SESSION)
 
 let ytPlayer = null;
 let ytReady = false;
@@ -511,7 +532,10 @@ function onYouTubeIframeAPIReady(){
 }
 function onYtStateChange(e){
   if(e.data === YT.PlayerState.ENDED){ handleTrackEnded(); }
-  if(e.data === YT.PlayerState.PLAYING){ isPlaying = true; updatePlayPauseIcon(); setMediaSessionPlaybackState('playing'); }
+  if(e.data === YT.PlayerState.PLAYING){
+    isPlaying = true; updatePlayPauseIcon(); setMediaSessionPlaybackState('playing');
+    if(pendingSeekPosition != null){ ytPlayer.seekTo(pendingSeekPosition, true); pendingSeekPosition = null; }
+  }
   if(e.data === YT.PlayerState.PAUSED){ isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); }
 }
 function onYtError(){
@@ -522,6 +546,9 @@ function onYtError(){
 }
 
 localAudio.addEventListener('ended', handleTrackEnded);
+localAudio.addEventListener('loadedmetadata', ()=>{
+  if(pendingSeekPosition != null){ localAudio.currentTime = pendingSeekPosition; pendingSeekPosition = null; }
+});
 localAudio.addEventListener('play', ()=>{ isPlaying = true; updatePlayPauseIcon(); setMediaSessionPlaybackState('playing'); });
 localAudio.addEventListener('pause', ()=>{ isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); });
 localAudio.addEventListener('error', ()=>{
@@ -580,6 +607,50 @@ if('mediaSession' in navigator){
   navigator.mediaSession.setActionHandler('previoustrack', ()=> prevTrack());
   navigator.mediaSession.setActionHandler('nexttrack', ()=> nextTrack());
 }
+
+/* ============ SESIÓN DE REPRODUCCIÓN (recuperar tras un cierre en segundo plano) ============ */
+/* Android/iOS a veces matan la pestaña en segundo plano para ahorrar memoria/batería (esto no
+   depende de la app: es una decisión del sistema operativo, igual que le pasa a cualquier web).
+   Para que eso no te haga perder la canción/lista por la que ibas, guardamos periódicamente dónde
+   estabas y, si la página se reinicia "de la nada", te ofrecemos continuar con un solo toque
+   (un toque cuenta como gesto real del usuario, así que el audio puede arrancar sin bloqueos). */
+function savePlaybackSession(){
+  if(!currentTrack || queue.length===0) return;
+  let position = 0;
+  if(currentTrack.kind === 'yt' && ytReady){ try{ position = ytPlayer.getCurrentTime()||0; }catch(e){} }
+  else if(currentTrack.kind === 'drive'){ position = localAudio.currentTime||0; }
+  try{
+    LS.set('mm_resume_session', { queue, queueIndex, position, shuffleOn, repeatMode, savedAt: Date.now() });
+  }catch(e){}
+}
+function clearPlaybackSession(){ try{ localStorage.removeItem('mm_resume_session'); }catch(e){} }
+
+function hideResumeBanner(){ document.getElementById('resume-banner').classList.remove('show'); }
+function offerResumeIfAny(){
+  let saved;
+  try{ saved = LS.get('mm_resume_session', null); }catch(e){ saved = null; }
+  if(!saved || !saved.queue || !saved.queue.length) return;
+  if(Date.now() - (saved.savedAt||0) > 1000*60*60*12){ clearPlaybackSession(); return; } // más de 12h: la descartamos
+  const track = saved.queue[saved.queueIndex];
+  if(!track) return;
+  const banner = document.getElementById('resume-banner');
+  document.getElementById('resume-text').textContent = 'Se interrumpió la reproducción: "' + track.title + '"';
+  banner.classList.add('show');
+  document.getElementById('resume-btn').onclick = ()=>{
+    queue = saved.queue;
+    queueIndex = saved.queueIndex;
+    shuffleOn = !!saved.shuffleOn;
+    repeatMode = saved.repeatMode || 'off';
+    pendingSeekPosition = saved.position || 0;
+    loadTrack(queue[queueIndex]);
+    hideResumeBanner();
+    clearPlaybackSession();
+  };
+  document.getElementById('resume-dismiss').onclick = ()=>{ hideResumeBanner(); clearPlaybackSession(); };
+}
+setInterval(savePlaybackSession, 5000);
+document.addEventListener('visibilitychange', ()=>{ if(document.visibilityState === 'hidden') savePlaybackSession(); });
+window.addEventListener('pagehide', savePlaybackSession);
 
 /* ============ PLAYBACK CONTROL ============ */
 function trackKey(t){ return t.kind + ':' + t.id; }
@@ -1128,6 +1199,7 @@ if(restoreDriveSession()){
 }
 renderSidebarPlaylists();
 renderView();
+offerResumeIfAny();
 
 /* ============ PWA: registro del service worker ============ */
 /* Permite instalar la app (icono propio, sin barra del navegador) y que abra
