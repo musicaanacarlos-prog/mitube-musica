@@ -504,7 +504,8 @@ function onYouTubeIframeAPIReady(){
     playerVars:{ autoplay:0, controls:0, disablekb:1, modestbranding:1 },
     events:{
       onReady: ()=>{ ytReady = true; ytPlayer.setVolume(document.getElementById('volume').value); },
-      onStateChange: onYtStateChange
+      onStateChange: onYtStateChange,
+      onError: onYtError
     }
   });
 }
@@ -513,10 +514,36 @@ function onYtStateChange(e){
   if(e.data === YT.PlayerState.PLAYING){ isPlaying = true; updatePlayPauseIcon(); setMediaSessionPlaybackState('playing'); }
   if(e.data === YT.PlayerState.PAUSED){ isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); }
 }
+function onYtError(){
+  // Un vídeo que falla (bloqueado, borrado, error puntual de red al volver de segundo plano...)
+  // no debe dejar la cola de reproducción colgada para siempre: pasamos a la siguiente.
+  isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused');
+  nextTrack();
+}
 
 localAudio.addEventListener('ended', handleTrackEnded);
 localAudio.addEventListener('play', ()=>{ isPlaying = true; updatePlayPauseIcon(); setMediaSessionPlaybackState('playing'); });
 localAudio.addEventListener('pause', ()=>{ isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); });
+localAudio.addEventListener('error', ()=>{
+  // Fallo cargando/reproduciendo el audio (p.ej. tras volver de segundo plano): no dejar la cola colgada.
+  if(!currentTrack) return;
+  isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused');
+  nextTrack();
+});
+
+/* Reajusta el estado real al volver de segundo plano (pantalla bloqueada, cambio de app...),
+   por si algo se quedó "colgado" mientras la página estaba en background. */
+document.addEventListener('visibilitychange', ()=>{
+  if(document.visibilityState !== 'visible' || !currentTrack) return;
+  if(currentTrack.kind === 'yt' && ytReady){
+    const st = ytPlayer.getPlayerState();
+    isPlaying = (st === YT.PlayerState.PLAYING);
+  } else if(currentTrack.kind === 'drive'){
+    isPlaying = !localAudio.paused;
+  }
+  updatePlayPauseIcon();
+  setMediaSessionPlaybackState(isPlaying ? 'playing' : 'paused');
+});
 
 /* ============ MEDIA SESSION (controles en pantalla de bloqueo / notificaciones) ============ */
 /* Esto es lo que le dice al sistema operativo qué mostrar (título, ⏮ ⏯ ⏭) y qué
@@ -537,8 +564,19 @@ function setMediaSessionPlaybackState(state){
   if('mediaSession' in navigator) navigator.mediaSession.playbackState = state;
 }
 if('mediaSession' in navigator){
-  navigator.mediaSession.setActionHandler('play', ()=>{ if(currentTrack && !isPlaying) togglePlayPause(); });
-  navigator.mediaSession.setActionHandler('pause', ()=>{ if(currentTrack && isPlaying) togglePlayPause(); });
+  // Actúan directamente sobre el reproductor real (no sobre la variable isPlaying, que puede
+  // desincronizarse si un intento de reproducción automática en segundo plano falla en silencio).
+  // Así el botón de la pantalla de bloqueo SIEMPRE responde, incluso si la app se quedó "colgada".
+  navigator.mediaSession.setActionHandler('play', ()=>{
+    if(!currentTrack) return;
+    if(currentTrack.kind === 'yt'){ if(ytReady) ytPlayer.playVideo(); }
+    else { const p = localAudio.play(); if(p && p.catch) p.catch(()=>{}); }
+  });
+  navigator.mediaSession.setActionHandler('pause', ()=>{
+    if(!currentTrack) return;
+    if(currentTrack.kind === 'yt'){ if(ytReady) ytPlayer.pauseVideo(); }
+    else { localAudio.pause(); }
+  });
   navigator.mediaSession.setActionHandler('previoustrack', ()=> prevTrack());
   navigator.mediaSession.setActionHandler('nexttrack', ()=> nextTrack());
 }
@@ -552,43 +590,89 @@ function playQueueAt(list, index){
   loadTrack(queue[queueIndex]);
 }
 
+/* Pequeña caché en memoria para adelantar la descarga de la siguiente pista de Drive
+   y que el cambio de canción sea instantáneo (y más fiable si el móvil está en segundo plano). */
+const driveBlobCache = new Map(); // id -> Blob
+let prefetchedForIndex = -1;
+
+async function getDriveBlob(fileId){
+  if(driveBlobCache.has(fileId)) return driveBlobCache.get(fileId);
+  const blob = await fetchDriveBlob(fileId);
+  if(blob) driveBlobCache.set(fileId, blob);
+  return blob;
+}
+function prefetchUpcoming(){
+  const ni = nextIndex();
+  if(ni === -1 || ni === prefetchedForIndex) return;
+  const t = queue[ni];
+  if(!t || t.kind !== 'drive' || driveBlobCache.has(t.id)) return;
+  prefetchedForIndex = ni;
+  getDriveBlob(t.id);
+  // no guardamos más de 3 blobs en memoria a la vez
+  if(driveBlobCache.size > 3){
+    const firstKey = driveBlobCache.keys().next().value;
+    if(firstKey !== t.id) driveBlobCache.delete(firstKey);
+  }
+}
+
 function loadTrack(track){
   currentTrack = track;
-  if(ytReady) ytPlayer.stopVideo();
+  try{ if(ytReady) ytPlayer.stopVideo(); }catch(e){}
   localAudio.pause();
   if(currentObjectUrl){ URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
 
   const ytVisual = document.getElementById('yt-visual');
   const localVisual = document.getElementById('local-visual');
+  const loadToken = ++loadTrack._token; // evita que una carga antigua (p.ej. tras volver de bg) pise a la nueva
 
   if(track.kind === 'yt'){
     ytVisual.classList.add('show');
     localVisual.style.display = 'none';
-    if(ytReady){ ytPlayer.loadVideoById(track.id); }
+    isPlaying = true; // se corrige enseguida con el evento real onStateChange
+    try{
+      if(ytReady){ ytPlayer.loadVideoById(track.id); }
+      else { isPlaying = false; }
+    }catch(e){ isPlaying = false; }
   } else if(track.kind === 'drive'){
     ytVisual.classList.remove('show');
     localVisual.style.display = 'flex';
-    fetchDriveBlob(track.id).then(blob=>{
-      if(!blob){ isPlaying=false; updatePlayPauseIcon(); return; }
+    isPlaying = true; // optimista; se corrige con 'play'/'pause'/'error' o si play() es rechazado
+    getDriveBlob(track.id).then(blob=>{
+      if(loadToken !== loadTrack._token) return; // el usuario ya cambió de pista mientras cargaba
+      if(!blob){ isPlaying=false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); return; }
       currentObjectUrl = URL.createObjectURL(blob);
       localAudio.src = currentObjectUrl;
-      localAudio.play();
+      const p = localAudio.play();
+      if(p && p.catch){
+        p.catch(()=>{
+          // el navegador bloqueó la reproducción automática (frecuente tras estar mucho tiempo
+          // en segundo plano): dejamos el estado en "pausado" para que el botón de play
+          // (incluido el de la pantalla de bloqueo) lo retome con un solo toque.
+          if(loadToken !== loadTrack._token) return;
+          isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused');
+        });
+      }
+      prefetchedForIndex = -1;
+      prefetchUpcoming();
     });
   }
   document.getElementById('np-title').textContent = track.title;
   document.getElementById('np-sub').textContent = track.subtitle || '';
-  isPlaying = true;
   updatePlayPauseIcon();
   updateMediaSessionMetadata(track);
-  setMediaSessionPlaybackState('playing');
+  setMediaSessionPlaybackState(isPlaying ? 'playing' : 'paused');
 }
+loadTrack._token = 0;
 
 function togglePlayPause(){
   if(!currentTrack) return;
   if(currentTrack.kind === 'yt'){
     if(isPlaying){ ytPlayer.pauseVideo(); } else { ytPlayer.playVideo(); }
   } else {
-    if(isPlaying){ localAudio.pause(); } else { localAudio.play(); }
+    if(isPlaying){ localAudio.pause(); } else {
+      const p = localAudio.play();
+      if(p && p.catch) p.catch(()=>{ isPlaying=false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); });
+    }
   }
 }
 function updatePlayPauseIcon(){
@@ -672,6 +756,7 @@ setInterval(()=>{
   if('mediaSession' in navigator && 'setPositionState' in navigator.mediaSession && dur>0 && isFinite(dur)){
     try{ navigator.mediaSession.setPositionState({ duration: dur, position: Math.min(cur,dur), playbackRate: 1 }); }catch(e){}
   }
+  if(currentTrack.kind === 'drive' && dur>0 && (dur-cur) < 8){ prefetchUpcoming(); }
 }, 500);
 
 /* ============ SEARCH (YouTube Data API v3) ============ */
