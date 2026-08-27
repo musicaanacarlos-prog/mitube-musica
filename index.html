@@ -509,12 +509,21 @@ let currentTrack = null;
 let isPlaying = false;
 let shuffleOn = false;
 let repeatMode = 'off';  // off | all | one
-let currentObjectUrl = null;
 let pendingSeekPosition = null; // usado al recuperar una sesión guardada (ver RESUME SESSION)
 
 let ytPlayer = null;
 let ytReady = false;
-const localAudio = new Audio();
+
+/* Dos elementos <audio> reales (no uno): mientras suena el actual ("localAudio"), podemos
+   dejar preparada la siguiente pista de Drive en el otro ("bufferAudio") y, al cambiar,
+   arrancarlo ANTES de cortar el anterior. Así nunca hay un instante de silencio total entre
+   canciones. Esto importa de verdad en el móvil: Chrome usa precisamente "¿esta pestaña está
+   sonando ahora mismo?" para decidir si puede congelarla en segundo plano, y un hueco de
+   silencio -aunque sea de medio segundo- es la señal que necesita para hacerlo. */
+const audioA = new Audio();
+const audioB = new Audio();
+let localAudio = audioA;   // el que está sonando ahora
+let bufferAudio = audioB;  // el que tenemos preparado en espera
 
 function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
 
@@ -545,18 +554,24 @@ function onYtError(){
   nextTrack();
 }
 
-localAudio.addEventListener('ended', handleTrackEnded);
-localAudio.addEventListener('loadedmetadata', ()=>{
-  if(pendingSeekPosition != null){ localAudio.currentTime = pendingSeekPosition; pendingSeekPosition = null; }
-});
-localAudio.addEventListener('play', ()=>{ isPlaying = true; updatePlayPauseIcon(); setMediaSessionPlaybackState('playing'); });
-localAudio.addEventListener('pause', ()=>{ isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); });
-localAudio.addEventListener('error', ()=>{
-  // Fallo cargando/reproduciendo el audio (p.ej. tras volver de segundo plano): no dejar la cola colgada.
-  if(!currentTrack) return;
-  isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused');
-  nextTrack();
-});
+/* Los dos elementos comparten el mismo cableado; cada handler comprueba si el evento viene
+   del que está activo en ESE momento (localAudio puede pasar a apuntar al otro tras un swap). */
+function attachAudioHandlers(el){
+  el.addEventListener('ended', ()=>{ if(el === localAudio) handleTrackEnded(); });
+  el.addEventListener('loadedmetadata', ()=>{
+    if(el === localAudio && pendingSeekPosition != null){ el.currentTime = pendingSeekPosition; pendingSeekPosition = null; }
+  });
+  el.addEventListener('play', ()=>{ if(el === localAudio){ isPlaying = true; updatePlayPauseIcon(); setMediaSessionPlaybackState('playing'); } });
+  el.addEventListener('pause', ()=>{ if(el === localAudio){ isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); } });
+  el.addEventListener('error', ()=>{
+    // Fallo cargando/reproduciendo el audio (p.ej. tras volver de segundo plano): no dejar la cola colgada.
+    if(el !== localAudio || !currentTrack) return;
+    isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused');
+    nextTrack();
+  });
+}
+attachAudioHandlers(audioA);
+attachAudioHandlers(audioB);
 
 /* Reajusta el estado real al volver de segundo plano (pantalla bloqueada, cambio de app...),
    por si algo se quedó "colgado" mientras la página estaba en background. */
@@ -661,8 +676,8 @@ function playQueueAt(list, index){
   loadTrack(queue[queueIndex]);
 }
 
-/* Pequeña caché en memoria para adelantar la descarga de la siguiente pista de Drive
-   y que el cambio de canción sea instantáneo (y más fiable si el móvil está en segundo plano). */
+/* Pequeña caché en memoria de blobs ya descargados de Drive (para no volver a pedirlos por red),
+   más la preparación real del elemento de audio "en espera" -ver comentario junto a bufferAudio-. */
 const driveBlobCache = new Map(); // id -> Blob
 let prefetchedForIndex = -1;
 
@@ -672,31 +687,78 @@ async function getDriveBlob(fileId){
   if(blob) driveBlobCache.set(fileId, blob);
   return blob;
 }
+function releaseAudioUrl(el){
+  if(el.dataset.objectUrl){ try{ URL.revokeObjectURL(el.dataset.objectUrl); }catch(e){} el.dataset.objectUrl=''; }
+}
+function prepareBuffer(track, blob){
+  releaseAudioUrl(bufferAudio);
+  const url = URL.createObjectURL(blob);
+  bufferAudio.src = url;
+  bufferAudio.dataset.trackId = track.id;
+  bufferAudio.dataset.objectUrl = url;
+  bufferAudio.volume = localAudio.volume;
+  bufferAudio.load();
+}
 function prefetchUpcoming(){
   const ni = nextIndex();
   if(ni === -1 || ni === prefetchedForIndex) return;
   const t = queue[ni];
-  if(!t || t.kind !== 'drive' || driveBlobCache.has(t.id)) return;
+  if(!t || t.kind !== 'drive' || bufferAudio.dataset.trackId === t.id) return;
   prefetchedForIndex = ni;
-  getDriveBlob(t.id);
-  // no guardamos más de 3 blobs en memoria a la vez
+  getDriveBlob(t.id).then(blob=>{
+    if(!blob) return;
+    if(nextIndex() !== ni) return; // la cola cambió mientras se descargaba; ya no aplica
+    prepareBuffer(t, blob);
+  });
+  // no guardamos más de 3 blobs descargados en memoria a la vez
   if(driveBlobCache.size > 3){
     const firstKey = driveBlobCache.keys().next().value;
     if(firstKey !== t.id) driveBlobCache.delete(firstKey);
   }
 }
 
-function loadTrack(track){
-  currentTrack = track;
-  try{ if(ytReady) ytPlayer.stopVideo(); }catch(e){}
-  localAudio.pause();
-  if(currentObjectUrl){ URL.revokeObjectURL(currentObjectUrl); currentObjectUrl = null; }
+/* Arranca "incoming" (ya cargado) ANTES de soltar el que sonaba, para que nunca haya un
+   instante de silencio total entre canciones -ver el porqué junto a la definición de bufferAudio-. */
+function swapToBuffer(loadToken){
+  const incoming = bufferAudio;
+  const outgoing = localAudio;
+  const p = incoming.play();
+  const finish = ()=>{
+    if(loadToken !== loadTrack._token) return;
+    localAudio = incoming;
+    bufferAudio = outgoing;
+    outgoing.pause();
+    releaseAudioUrl(outgoing);
+    outgoing.removeAttribute('src'); outgoing.dataset.trackId = '';
+    isPlaying = true; updatePlayPauseIcon(); setMediaSessionPlaybackState('playing');
+    prefetchedForIndex = -1;
+    prefetchUpcoming();
+  };
+  if(p && p.then){
+    p.then(finish).catch(()=>{
+      if(loadToken !== loadTrack._token) return;
+      // el navegador bloqueó la reproducción automática (frecuente tras estar mucho tiempo
+      // en segundo plano): dejamos el estado en "pausado" para que el botón de play
+      // (incluido el de la pantalla de bloqueo) lo retome con un solo toque.
+      isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused');
+    });
+  } else { finish(); }
+}
 
+function loadTrack(track){
+  const previousTrack = currentTrack;
+  currentTrack = track;
   const ytVisual = document.getElementById('yt-visual');
   const localVisual = document.getElementById('local-visual');
   const loadToken = ++loadTrack._token; // evita que una carga antigua (p.ej. tras volver de bg) pise a la nueva
 
+  document.getElementById('np-title').textContent = track.title;
+  document.getElementById('np-sub').textContent = track.subtitle || '';
+  updateMediaSessionMetadata(track);
+
   if(track.kind === 'yt'){
+    // Cambiar a YouTube sí implica cortar cualquier audio de Drive que estuviera sonando.
+    localAudio.pause(); bufferAudio.pause();
     ytVisual.classList.add('show');
     localVisual.style.display = 'none';
     isPlaying = true; // se corrige enseguida con el evento real onStateChange
@@ -704,34 +766,29 @@ function loadTrack(track){
       if(ytReady){ ytPlayer.loadVideoById(track.id); }
       else { isPlaying = false; }
     }catch(e){ isPlaying = false; }
-  } else if(track.kind === 'drive'){
-    ytVisual.classList.remove('show');
-    localVisual.style.display = 'flex';
-    isPlaying = true; // optimista; se corrige con 'play'/'pause'/'error' o si play() es rechazado
+    updatePlayPauseIcon();
+    setMediaSessionPlaybackState(isPlaying ? 'playing' : 'paused');
+    return;
+  }
+
+  // track.kind === 'drive'
+  if(previousTrack && previousTrack.kind === 'yt'){ try{ if(ytReady) ytPlayer.stopVideo(); }catch(e){} }
+  ytVisual.classList.remove('show');
+  localVisual.style.display = 'flex';
+
+  if(bufferAudio.dataset.trackId === track.id && bufferAudio.src){
+    // Ya la teníamos precargada (gracias al prefetch): cambio instantáneo y sin hueco de silencio.
+    swapToBuffer(loadToken);
+  } else {
+    isPlaying = true; // optimista; se corrige con el resultado real del play() o si falla
+    updatePlayPauseIcon();
     getDriveBlob(track.id).then(blob=>{
       if(loadToken !== loadTrack._token) return; // el usuario ya cambió de pista mientras cargaba
       if(!blob){ isPlaying=false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused'); return; }
-      currentObjectUrl = URL.createObjectURL(blob);
-      localAudio.src = currentObjectUrl;
-      const p = localAudio.play();
-      if(p && p.catch){
-        p.catch(()=>{
-          // el navegador bloqueó la reproducción automática (frecuente tras estar mucho tiempo
-          // en segundo plano): dejamos el estado en "pausado" para que el botón de play
-          // (incluido el de la pantalla de bloqueo) lo retome con un solo toque.
-          if(loadToken !== loadTrack._token) return;
-          isPlaying = false; updatePlayPauseIcon(); setMediaSessionPlaybackState('paused');
-        });
-      }
-      prefetchedForIndex = -1;
-      prefetchUpcoming();
+      prepareBuffer(track, blob);
+      swapToBuffer(loadToken);
     });
   }
-  document.getElementById('np-title').textContent = track.title;
-  document.getElementById('np-sub').textContent = track.subtitle || '';
-  updatePlayPauseIcon();
-  updateMediaSessionMetadata(track);
-  setMediaSessionPlaybackState(isPlaying ? 'playing' : 'paused');
 }
 loadTrack._token = 0;
 
@@ -792,7 +849,8 @@ document.getElementById('repeat-btn').onclick = (e)=>{
 };
 document.getElementById('volume').oninput = (e)=>{
   const v = e.target.value;
-  localAudio.volume = v/100;
+  audioA.volume = v/100;
+  audioB.volume = v/100; // también el que esté en espera, para que suene al volumen correcto al activarse
   if(ytReady) ytPlayer.setVolume(v);
 };
 
